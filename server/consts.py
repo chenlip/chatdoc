@@ -1,1 +1,2 @@
 BASE_DIR = "data"
+OPENAI_API_KEY = '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'

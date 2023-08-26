@@ -2,17 +2,18 @@ from PyPDF2 import PdfReader
 import sys
 import os
 import logging
-from llama_index import SimpleDirectoryReader, GPTSimpleVectorIndex, QuestionAnswerPrompt, QueryMode, LLMPredictor
-from consts import BASE_DIR
+from llama_index import SimpleDirectoryReader, GPTVectorStoreIndex, QuestionAnswerPrompt, LLMPredictor, StorageContext, PromptHelper
+from consts import BASE_DIR, OPENAI_API_KEY
 import ebooklib
 from ebooklib import epub
 from epub2txt import epub2txt
 from langchain.chat_models import ChatOpenAI
-from llama_index import download_loader
+from llama_index import download_loader, load_index_from_storage
 import docx2txt
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
+os.environ[ "OPENAI_API_KEY" ] = OPENAI_API_KEY
 
 llm_predictor = LLMPredictor(llm=ChatOpenAI(temperature=0.2, model_name="gpt-3.5-turbo"))
 CJKPDFReader = download_loader("CJKPDFReader")
@@ -70,14 +71,14 @@ class Doc:
 
     def extract_epub(self):
         res = epub2txt(self.file_path)
-        with open(self.data_file, "a") as file:
+        with open(self.data_file, "a", encoding="utf-8") as file:
             for i in range(len(res)):
                 file.write(res[i])
 
     def extract_pdf(self):
         reader = PdfReader(self.file_path)
         print("total pages ", len(reader.pages))
-        with open(self.data_file, "a") as file:
+        with open(self.data_file, "a", encoding="utf-8") as file:
             for i in range(len(reader.pages)):
                 page = reader.pages[i]
                 text = page.extract_text()
@@ -85,7 +86,7 @@ class Doc:
 
     def extra_docx(self):
         res = docx2txt.process(self.file_path)
-        with open(self.data_file, "a") as file:
+        with open(self.data_file, "a", encoding="utf-8") as file:
             file.write(res)
 
     def build_index(self, doc_type: str):
@@ -94,18 +95,25 @@ class Doc:
             return
 
         documents = SimpleDirectoryReader(input_files=[self.data_file]).load_data()
-        index = GPTSimpleVectorIndex(documents)
-        index.save_to_disk(self.index_file)
+        index = GPTVectorStoreIndex.from_documents(documents)
+        index.set_index_id(self.filename)
+        # 保存
+        index.storage_context.persist('storage')
+        #index.save_to_disk(self.index_file)
 
     def build_web(self):
         loader = SimpleWebPageReader()
         documents = loader.load_data(urls=[self.filename])
-        index = GPTSimpleVectorIndex(documents)
-        index.save_to_disk(self.index_file)
+        index = GPTVectorStoreIndex.from_documents(documents)
+        index.set_index_id(self.filename)
+        # 保存
+        index.storage_context.persist('storage')
 
     def query(self, question: str):
         # 加载索引
-        new_index = GPTSimpleVectorIndex.load_from_disk(self.index_file)
+        # new_index = GPTSimpleVectorIndex.load_from_disk(self.index_file)
+        # storage_context = StorageContext.from_defaults(persist_dir='storage')
+        new_index = GPTVectorStoreIndex.from_vector_store(self.index_file)
 
         query_str = question
 
@@ -115,8 +123,8 @@ class Doc:
         response = new_index.query(
             query_str,
             text_qa_template=QA_PROMPT,
-            # response_mode="tree_summarize",
-            # similarity_top_k=3,
+            response_mode="tree_summarize",
+            similarity_top_k=3,
             # mode=QueryMode.EMBEDDING
         )
 
@@ -130,12 +138,11 @@ class Doc:
 
         if os.path.exists(index_file) == False:
             documents = loader.load_data(file=self.file_path)
-            index = GPTSimpleVectorIndex(documents)
+            #index = GPTSimpleVectorIndex(documents)
+            index = GPTVectorStoreIndex.from_documents(documents)
             index.save_to_disk(index_file)
         else:
-            index = GPTSimpleVectorIndex.load_from_disk(index_file)
-
-
+            index = GPTVectorStoreIndex.from_vector_store(index_file)
 
         QUESTION_ANSWER_PROMPT = QuestionAnswerPrompt(QUESTION_ANSWER_PROMPT_TMPL_2)
 

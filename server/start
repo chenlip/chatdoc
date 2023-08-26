@@ -4,4 +4,4 @@ set -e
 echo "Starting Python server..."
 mkdir -p data
 pip install -r requirements.txt
-OPENAI_API_KEY=$1 python3 main.py
+OPENAI_API_KEY=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 python3 main.py

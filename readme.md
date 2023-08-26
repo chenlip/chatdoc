@@ -10,6 +10,10 @@
 # my local python version 3.9.7
 cd server
 ./start {OPEN_AI_KEY}
+
+# windows 11
+python main.py OPENAI_API_KEY=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
+
 ```
 
 ## 启动前端
